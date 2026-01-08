@@ -1,0 +1,56 @@
+# Docker Compose for local MedLit Agent development
+version: '3.8'
+
+services:
+  # MedLit Agent
+  medlit:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: medlit-agent
+    env_file:
+      - ../.env
+    environment:
+      - ENVIRONMENT=development
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+    volumes:
+      - ../src:/app/src:ro
+      - ../config:/app/config:ro
+    networks:
+      - medlit-network
+    stdin_open: true
+    tty: true
+
+  # Redis for caching
+  redis:
+    image: redis:7-alpine
+    container_name: medlit-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - medlit-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # LangSmith (mock for local dev - in production use actual LangSmith)
+  # Uncomment if you have a local tracing solution
+  # tracing:
+  #   image: langchain/langsmith:latest
+  #   ports:
+  #     - "1984:1984"
+  #   networks:
+  #     - medlit-network
+
+networks:
+  medlit-network:
+    driver: bridge
+
+volumes:
+  redis-data:

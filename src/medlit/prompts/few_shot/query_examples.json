@@ -1,0 +1,42 @@
+[
+  {
+    "question": "Is low-dose aspirin recommended for preventing heart attacks in healthy adults?",
+    "output": {
+      "search_terms": ["aspirin", "primary prevention", "cardiovascular", "healthy adults"],
+      "mesh_terms": ["Aspirin", "Primary Prevention", "Cardiovascular Diseases", "Adult"],
+      "pubmed_query": "aspirin[MeSH] AND primary prevention[MeSH] AND cardiovascular diseases[MeSH] AND adult[MeSH]"
+    }
+  },
+  {
+    "question": "What are the side effects of metformin?",
+    "output": {
+      "search_terms": ["metformin", "adverse effects", "side effects"],
+      "mesh_terms": ["Metformin", "Drug-Related Side Effects and Adverse Reactions"],
+      "pubmed_query": "metformin[MeSH] AND (adverse effects[sh] OR drug-related side effects and adverse reactions[MeSH])"
+    }
+  },
+  {
+    "question": "Does vitamin D supplementation prevent COVID-19?",
+    "output": {
+      "search_terms": ["vitamin D", "COVID-19", "prevention", "SARS-CoV-2"],
+      "mesh_terms": ["Vitamin D", "COVID-19", "Dietary Supplements", "Disease Prevention"],
+      "pubmed_query": "vitamin D[MeSH] AND COVID-19[MeSH] AND (prevention[tiab] OR prophylaxis[tiab] OR supplementation[tiab])"
+    }
+  },
+  {
+    "question": "Is intermittent fasting effective for weight loss?",
+    "output": {
+      "search_terms": ["intermittent fasting", "weight loss", "obesity"],
+      "mesh_terms": ["Fasting", "Weight Loss", "Obesity"],
+      "pubmed_query": "intermittent fasting[tiab] AND (weight loss[MeSH] OR obesity[MeSH] OR body weight[MeSH])"
+    }
+  },
+  {
+    "question": "What is the best treatment for migraine headaches?",
+    "output": {
+      "search_terms": ["migraine", "treatment", "therapy"],
+      "mesh_terms": ["Migraine Disorders", "Therapeutics", "Treatment Outcome"],
+      "pubmed_query": "migraine disorders[MeSH] AND (therapeutics[MeSH] OR drug therapy[sh] OR treatment outcome[MeSH])"
+    }
+  }
+]

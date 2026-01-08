@@ -1,0 +1,69 @@
+[project]
+name = "medlit-agent"
+version = "0.1.0"
+description = "Medical literature search and synthesis agent powered by Google ADK"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "MedLit Team" }]
+
+dependencies = [
+    # Agent Framework
+    "google-adk>=0.1.0",
+
+    # LLM
+    "google-genai>=0.1.0",
+
+    # Observability
+    "langsmith>=0.1.0",
+
+    # HTTP & Data
+    "httpx>=0.27.0",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+
+    # Utilities
+    "python-dotenv>=1.0.0",
+    "structlog>=24.0.0",
+    "tenacity>=8.0.0",
+    "redis>=5.0.0",
+    "click>=8.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.3.0",
+    "mypy>=1.8.0",
+    "types-redis>=4.0.0",
+]
+
+[project.scripts]
+medlit = "medlit.main:cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/medlit"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-v --tb=short"

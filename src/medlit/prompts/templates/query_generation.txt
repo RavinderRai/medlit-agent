@@ -1,0 +1,39 @@
+Generate an optimized PubMed search query for the following medical question.
+
+## User Question
+{question}
+
+## Instructions
+
+1. Identify the key medical concepts (drugs, conditions, populations, interventions, outcomes)
+2. Convert common terms to medical terminology where appropriate
+3. Use MeSH terms when available
+4. Structure the query using Boolean operators (AND, OR)
+5. Consider synonyms and related terms
+
+## Common Term Mappings
+- heart attack → myocardial infarction
+- high blood pressure → hypertension
+- diabetes → diabetes mellitus
+- stroke → cerebrovascular accident
+- blood thinner → anticoagulants
+
+## Output Format
+
+Return a JSON object with:
+{{
+    "search_terms": ["term1", "term2"],
+    "mesh_terms": ["MeSH Term 1", "MeSH Term 2"],
+    "pubmed_query": "the formatted PubMed query string"
+}}
+
+## Example
+
+Question: "Is aspirin good for preventing heart attacks?"
+
+Output:
+{{
+    "search_terms": ["aspirin", "prevention", "cardiovascular"],
+    "mesh_terms": ["Aspirin", "Primary Prevention", "Myocardial Infarction"],
+    "pubmed_query": "aspirin[MeSH] AND primary prevention[MeSH] AND myocardial infarction[MeSH]"
+}}

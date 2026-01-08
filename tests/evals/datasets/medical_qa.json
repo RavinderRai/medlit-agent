@@ -1,0 +1,58 @@
+[
+  {
+    "id": "aspirin_prevention",
+    "question": "Is low-dose aspirin recommended for preventing heart attacks in healthy adults?",
+    "expected_topics": ["primary prevention", "cardiovascular", "bleeding risk"],
+    "expected_conclusion": "not_routinely_recommended",
+    "difficulty": "medium"
+  },
+  {
+    "id": "metformin_side_effects",
+    "question": "What are the common side effects of metformin?",
+    "expected_topics": ["gastrointestinal", "lactic acidosis", "vitamin B12"],
+    "expected_conclusion": "has_side_effects",
+    "difficulty": "easy"
+  },
+  {
+    "id": "statin_muscle_pain",
+    "question": "Do statins cause muscle pain?",
+    "expected_topics": ["myalgia", "rhabdomyolysis", "nocebo effect"],
+    "expected_conclusion": "can_cause_but_rare",
+    "difficulty": "medium"
+  },
+  {
+    "id": "vitamin_d_covid",
+    "question": "Does vitamin D supplementation prevent COVID-19?",
+    "expected_topics": ["immune function", "respiratory infection", "insufficient evidence"],
+    "expected_conclusion": "insufficient_evidence",
+    "difficulty": "hard"
+  },
+  {
+    "id": "exercise_depression",
+    "question": "Is exercise effective for treating depression?",
+    "expected_topics": ["mental health", "aerobic exercise", "comparable to medication"],
+    "expected_conclusion": "effective",
+    "difficulty": "medium"
+  },
+  {
+    "id": "intermittent_fasting",
+    "question": "Is intermittent fasting effective for weight loss?",
+    "expected_topics": ["caloric restriction", "metabolic effects", "adherence"],
+    "expected_conclusion": "effective_similar_to_other_diets",
+    "difficulty": "medium"
+  },
+  {
+    "id": "antidepressant_pregnancy",
+    "question": "Are SSRIs safe during pregnancy?",
+    "expected_topics": ["risk-benefit", "neonatal effects", "depression risk"],
+    "expected_conclusion": "risk_benefit_assessment_needed",
+    "difficulty": "hard"
+  },
+  {
+    "id": "proton_pump_inhibitors",
+    "question": "What are the long-term risks of proton pump inhibitors?",
+    "expected_topics": ["kidney disease", "bone fractures", "infection risk", "vitamin deficiency"],
+    "expected_conclusion": "has_risks_with_long_term_use",
+    "difficulty": "medium"
+  }
+]

@@ -1,0 +1,31 @@
+Format the following evidence synthesis into a user-friendly response.
+
+## Synthesis Data
+{synthesis_json}
+
+## Original Question
+{question}
+
+## Formatting Guidelines
+
+1. Start with a clear, direct answer
+2. Follow with supporting evidence and citations
+3. Note important limitations
+4. End with appropriate caveats
+
+## Output Structure
+
+### Answer
+[Direct answer to the question - 2-3 sentences]
+
+### Evidence
+[Key findings with inline citations like [PMID: 12345678]]
+
+### Limitations
+[What the evidence doesn't tell us]
+
+### Sources
+[List of PMIDs with article titles]
+
+---
+**Disclaimer**: This information is from published research and is for educational purposes only. Always consult a healthcare provider for medical decisions.

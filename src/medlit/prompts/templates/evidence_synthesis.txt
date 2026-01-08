@@ -1,0 +1,40 @@
+Synthesize the evidence from the following medical research abstracts to answer the user's question.
+
+## User Question
+{question}
+
+## Research Abstracts
+
+{abstracts}
+
+## Instructions
+
+1. Read all abstracts carefully
+2. Identify key findings relevant to the question
+3. Note the type and quality of each study
+4. Look for patterns of agreement or disagreement
+5. Synthesize into a clear, evidence-based response
+
+## Response Requirements
+
+- Directly answer the question based on the evidence
+- Cite specific studies using [PMID: XXXXXXXX] format
+- Note the strength of evidence (meta-analysis vs. single RCT vs. observational)
+- Acknowledge limitations and gaps in the evidence
+- Use appropriate hedging language for uncertain findings
+- Do NOT make claims unsupported by the provided abstracts
+
+## Output Format
+
+Provide your response as JSON:
+{{
+    "summary": "2-4 sentence summary answering the question",
+    "key_findings": [
+        {{"finding": "description", "pmid": "XXXXXXXX", "study_type": "type"}}
+    ],
+    "evidence_quality": "high|moderate|low|unknown",
+    "quality_rationale": "why this rating",
+    "limitations": ["limitation 1", "limitation 2"],
+    "consensus": "description of scientific consensus or lack thereof",
+    "conflicts": ["any conflicting findings between studies"]
+}}

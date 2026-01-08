@@ -1,0 +1,59 @@
+[
+  {
+    "question": "Is aspirin effective for primary prevention of cardiovascular disease?",
+    "num_abstracts": 3,
+    "output": {
+      "summary": "Recent evidence suggests that low-dose aspirin is no longer routinely recommended for primary prevention of cardiovascular disease in healthy adults. While aspirin reduces the risk of cardiovascular events, this benefit is largely offset by increased bleeding risk, particularly in older adults.",
+      "key_findings": [
+        {
+          "finding": "In adults over 70 without cardiovascular disease, aspirin did not reduce cardiovascular events but increased major bleeding",
+          "pmid": "30221597",
+          "study_type": "Randomized Controlled Trial"
+        },
+        {
+          "finding": "Meta-analysis found aspirin reduced cardiovascular events by 11% but increased major bleeding by 43%",
+          "pmid": "31116380",
+          "study_type": "Meta-Analysis"
+        }
+      ],
+      "evidence_quality": "high",
+      "quality_rationale": "Based on multiple large RCTs and meta-analyses with consistent findings",
+      "limitations": [
+        "Most studies focused on Western populations",
+        "Optimal approach for high-risk subgroups still debated"
+      ],
+      "consensus": "Major guidelines now recommend against routine aspirin for primary prevention in most adults, reserving it for those at high cardiovascular risk and low bleeding risk",
+      "conflicts": []
+    }
+  },
+  {
+    "question": "Does exercise reduce depression symptoms?",
+    "num_abstracts": 4,
+    "output": {
+      "summary": "Multiple studies support that regular exercise has a moderate antidepressant effect, comparable to some pharmacological treatments. Both aerobic and resistance training show benefits, though optimal dose and type remain unclear.",
+      "key_findings": [
+        {
+          "finding": "Exercise showed a large effect size (SMD = -0.80) for reducing depression symptoms compared to control",
+          "pmid": "36791917",
+          "study_type": "Meta-Analysis"
+        },
+        {
+          "finding": "Walking programs reduced depression symptoms in older adults with effect comparable to SSRIs",
+          "pmid": "35385682",
+          "study_type": "Randomized Controlled Trial"
+        }
+      ],
+      "evidence_quality": "moderate",
+      "quality_rationale": "Multiple RCTs and meta-analyses, but heterogeneity in exercise protocols and populations",
+      "limitations": [
+        "Difficult to blind participants to exercise intervention",
+        "Publication bias may inflate effect sizes",
+        "Long-term adherence and effects less studied"
+      ],
+      "consensus": "Exercise is recognized as an effective adjunct treatment for depression by major psychiatric organizations",
+      "conflicts": [
+        "Some studies show smaller effects when using intention-to-treat analysis"
+      ]
+    }
+  }
+]
