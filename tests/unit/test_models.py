@@ -1,9 +1,17 @@
 """Tests for data models."""
 
-import pytest
 from datetime import date
 
-from medlit.models import Article, Author, SearchQuery, SearchFilters, Evidence, Citation, EvidenceQuality
+import pytest
+
+from medlit.models import (
+    Article,
+    Author,
+    Citation,
+    EvidenceQuality,
+    SearchFilters,
+    SearchQuery,
+)
 
 
 class TestAuthor:
