@@ -2,12 +2,14 @@
 
 import structlog
 from google.adk.tools import FunctionTool
+from langsmith import traceable
 
 from medlit.pubmed import PubMedClient
 
 logger = structlog.get_logger(__name__)
 
 
+@traceable(name="fetch_evidence", run_type="tool")
 async def fetch_evidence(pmids: list[str]) -> dict:
     """Fetch full article details from PubMed for a list of PMIDs.
 

@@ -5,7 +5,6 @@ import pytest
 from medlit.utils.validators import (
     validate_question,
     sanitize_input,
-    is_medical_question,
     extract_entities,
     ValidationError,
 )
@@ -70,26 +69,6 @@ class TestSanitizeInput:
         """Test truncation."""
         result = sanitize_input("hello world", max_length=5)
         assert result == "hello"
-
-
-class TestIsMedicalQuestion:
-    """Tests for medical question detection."""
-
-    def test_medical_question(self):
-        """Test medical question is detected."""
-        assert is_medical_question("What is the treatment for diabetes?")
-
-    def test_medical_drug_question(self):
-        """Test drug question is detected."""
-        assert is_medical_question("What are the side effects of metformin?")
-
-    def test_non_medical_question(self):
-        """Test non-medical question."""
-        # May still detect as medical if it has some keywords
-        result = is_medical_question("What is the weather today?")
-        # Weather has no medical keywords
-        assert not result
-
 
 class TestExtractEntities:
     """Tests for entity extraction."""

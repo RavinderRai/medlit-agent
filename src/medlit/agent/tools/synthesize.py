@@ -1,14 +1,18 @@
 """Evidence synthesis tool for Google ADK agent."""
 
+import json
+
 import structlog
 from google.adk.tools import FunctionTool
+from langsmith import traceable
 
 logger = structlog.get_logger(__name__)
 
 
+@traceable(name="synthesize_evidence", run_type="tool")
 async def synthesize_evidence(
     question: str,
-    articles: list[dict],
+    articles_json: str,
 ) -> dict:
     """Synthesize evidence from multiple research articles into a coherent summary.
 
@@ -17,16 +21,21 @@ async def synthesize_evidence(
 
     Args:
         question: The medical question being answered
-        articles: List of article dictionaries from fetch_evidence with title, abstract, etc.
+        articles_json: JSON string containing list of article objects from fetch_evidence
 
     Returns:
-        Dictionary with synthesis results including:
-        - Summary of findings
-        - Evidence quality assessment
-        - Study type breakdown
-        - Key citations
-        - Limitations
+        Dictionary with synthesis results including summary, evidence quality, and citations.
     """
+    # Parse the JSON string
+    try:
+        articles = json.loads(articles_json) if isinstance(articles_json, str) else articles_json
+    except json.JSONDecodeError:
+        return {
+            "success": False,
+            "error": "Invalid JSON in articles_json",
+            "synthesis": None,
+        }
+
     if not articles:
         return {
             "success": False,

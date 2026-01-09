@@ -4,6 +4,7 @@ from datetime import date
 
 import structlog
 from google.adk.tools import FunctionTool
+from langsmith import traceable
 
 from medlit.config.constants import DEFAULT_DATE_RANGE_YEARS, DEFAULT_MAX_RESULTS
 from medlit.models import SearchFilters, SearchQuery
@@ -12,11 +13,11 @@ from medlit.pubmed import PubMedClient
 logger = structlog.get_logger(__name__)
 
 
+@traceable(name="search_pubmed", run_type="tool")
 async def search_pubmed(
     query: str,
     max_results: int = DEFAULT_MAX_RESULTS,
     years_back: int = DEFAULT_DATE_RANGE_YEARS,
-    article_types: list[str] | None = None,
 ) -> dict:
     """Search PubMed for medical research articles.
 
@@ -32,11 +33,9 @@ async def search_pubmed(
         query: The PubMed search query string (can include MeSH terms)
         max_results: Maximum number of results to return (1-50)
         years_back: How many years back to search
-        article_types: Optional filter for article types (e.g., ["Meta-Analysis", "Clinical Trial"])
 
     Returns:
         Dictionary with search results including PMIDs and count.
-        Returns a list of PubMed IDs (PMIDs) that can be fetched for full details.
     """
     logger.info("PubMed search tool called", query=query, max_results=max_results)
 
@@ -47,7 +46,7 @@ async def search_pubmed(
     filters = SearchFilters(
         min_date=min_date,
         max_date=today,
-        article_types=article_types or [],
+        article_types=[],
     )
 
     search_query = SearchQuery(

@@ -1,25 +1,26 @@
 """MedLit Agent implementation using Google ADK."""
 
+from __future__ import annotations
+
 import asyncio
-import json
-import re
-from datetime import date
+import os
+import uuid
 
 import structlog
-from google import genai
-from google.adk import Agent
+from google.adk import Runner
+from google.adk.agents import LlmAgent
+from google.adk.sessions import InMemorySessionService
+from google.genai import types
 
-from medlit.config.constants import DEFAULT_DATE_RANGE_YEARS, MEDICAL_DISCLAIMER
+from medlit.config.constants import MEDICAL_DISCLAIMER
 from medlit.config.settings import get_settings
 from medlit.agent.tools.evidence_fetch import fetch_evidence_tool
 from medlit.agent.tools.pubmed_search import search_pubmed_tool
 from medlit.agent.tools.synthesize import synthesize_evidence_tool
-from medlit.models import AgentResponse, ResponseStatus, SearchFilters, SearchQuery
+from medlit.models import AgentResponse, ResponseStatus
 from medlit.observability import MetricsTracker, init_langsmith
 from medlit.observability.callbacks import MedLitCallbackHandler
-from medlit.observability.langsmith import trace_function
 from medlit.prompts import get_system_prompt
-from medlit.pubmed import PubMedClient
 
 logger = structlog.get_logger(__name__)
 
@@ -41,18 +42,25 @@ class MedLitAgent:
         self.settings = get_settings()
         self.model_name = model_name or self.settings.model_name
 
-        # Initialize observability
+        # Set Google API key for ADK (it reads from environment)
+        if self.settings.google_api_key:
+            os.environ["GOOGLE_API_KEY"] = self.settings.google_api_key
+
+        # Initialize observability FIRST (before creating agent)
         if enable_tracing:
             init_langsmith()
 
         self.metrics = MetricsTracker()
         self.callback_handler = MedLitCallbackHandler()
 
-        # Initialize Gemini client
-        self.client = genai.Client(api_key=self.settings.google_api_key)
-
-        # Create the agent with tools
+        # Create the ADK agent and runner
         self._agent = self._create_agent()
+        self._session_service = InMemorySessionService()
+        self._runner = Runner(
+            app_name="medlit",
+            agent=self._agent,
+            session_service=self._session_service,
+        )
 
         logger.info(
             "MedLit agent initialized",
@@ -60,18 +68,18 @@ class MedLitAgent:
             tracing_enabled=self.settings.langsmith_enabled,
         )
 
-    def _create_agent(self) -> Agent:
+    def _create_agent(self) -> LlmAgent:
         """Create the Google ADK agent with tools."""
         system_prompt = get_system_prompt("agent_system")
 
-        # Define tools
+        # Get the underlying functions from the FunctionTools
         tools = [
             search_pubmed_tool,
             fetch_evidence_tool,
             synthesize_evidence_tool,
         ]
 
-        agent = Agent(
+        agent = LlmAgent(
             model=self.model_name,
             name="medlit_agent",
             description="Medical literature search and synthesis agent",
@@ -81,7 +89,6 @@ class MedLitAgent:
 
         return agent
 
-    @trace_function(name="medlit_agent_ask", run_type="chain")
     async def ask(self, question: str) -> AgentResponse:
         """Process a medical question and return synthesized evidence.
 
@@ -96,7 +103,7 @@ class MedLitAgent:
         self.callback_handler.on_agent_start(question)
 
         try:
-            # Run the agent
+            # Run the agent through ADK Runner
             response = await self._run_agent(question)
 
             self.callback_handler.on_agent_end(response)
@@ -116,9 +123,8 @@ class MedLitAgent:
                 disclaimer=MEDICAL_DISCLAIMER,
             )
 
-    @trace_function(name="medlit_agent_run", run_type="chain")
     async def _run_agent(self, question: str) -> AgentResponse:
-        """Run the agent to process a question.
+        """Run the agent through ADK Runner to process a question.
 
         Args:
             question: The medical question
@@ -126,193 +132,75 @@ class MedLitAgent:
         Returns:
             AgentResponse with results
         """
-        # Build default search query
-        today = date.today()
-        min_date = date(today.year - DEFAULT_DATE_RANGE_YEARS, today.month, today.day)
+        # Create unique session for this query
+        user_id = "medlit_user"
+        session_id = str(uuid.uuid4())
 
-        search_query = SearchQuery(
-            original_question=question,
-            filters=SearchFilters(
-                min_date=min_date,
-                max_date=today,
-            ),
+        # Create session
+        await self._session_service.create_session(
+            app_name="medlit",
+            user_id=user_id,
+            session_id=session_id,
         )
 
-        # Search PubMed
-        async with PubMedClient() as pubmed_client:
-            # Generate optimized search query using LLM
-            search_query = await self._generate_search_query(question, search_query)
-
-            self.callback_handler.on_tool_start("pubmed_search", search_query.pubmed_query)
-
-            # Execute search
-            articles = await pubmed_client.search_and_fetch(search_query)
-
-            self.callback_handler.on_tool_end("pubmed_search", f"{len(articles)} articles")
-
-            self.metrics.record_search(
-                pubmed_query=search_query.build_query(),
-                articles_found=len(articles),
-                latency_ms=0,  # Would need proper timing
-            )
-
-            if not articles:
-                return AgentResponse(
-                    question=question,
-                    status=ResponseStatus.NO_RESULTS,
-                    pubmed_query=search_query.build_query(),
-                    articles_found=0,
-                    articles_analyzed=0,
-                    disclaimer=MEDICAL_DISCLAIMER,
-                )
-
-            # Synthesize evidence
-            self.callback_handler.on_tool_start("synthesize", f"{len(articles)} articles")
-
-            response = await self._synthesize_evidence(question, articles)
-
-            self.callback_handler.on_tool_end("synthesize", "completed")
-
-            return response
-
-    @trace_function(name="generate_search_query", run_type="llm")
-    async def _generate_search_query(
-        self,
-        question: str,
-        base_query: SearchQuery,
-    ) -> SearchQuery:
-        """Use LLM to generate optimized PubMed search query.
-
-        Args:
-            question: Original question
-            base_query: Base query with filters
-
-        Returns:
-            SearchQuery with optimized search terms
-        """
-        from medlit.prompts import get_few_shot_examples, get_template
-
-        template = get_template("query_generation")
-        examples = get_few_shot_examples("query_examples")
-
-        # Format few-shot examples
-        examples_text = "\n\n".join(
-            f"Q: {ex['question']}\nA: {ex['output']}"
-            for ex in examples[:3]
+        # Create the user message
+        user_message = types.Content(
+            parts=[types.Part(text=question)],
+            role="user",
         )
 
-        prompt = f"""
-{template.format(question=question)}
-
-## Examples
-{examples_text}
-"""
+        # Run the agent and collect events
+        final_response = ""
+        tool_calls = []
 
         try:
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt,
-            )
+            # Use run_async for async execution
+            # Collect all events to ensure generator is fully consumed
+            events = []
+            async for adk_event in self._runner.run_async(
+                user_id=user_id,
+                session_id=session_id,
+                new_message=user_message,
+            ):
+                events.append(adk_event)
 
-            # Parse response - in production, use structured output
-            text = response.text
-            # Extract JSON from response
-            json_match = re.search(r"\{[^{}]*\}", text, re.DOTALL)
-            if json_match:
-                query_data = json.loads(json_match.group())
-                base_query.search_terms = query_data.get("search_terms", [])
-                base_query.mesh_terms = query_data.get("mesh_terms", [])
-                base_query.pubmed_query = query_data.get("pubmed_query", "")
+            # Process collected events
+            for adk_event in events:
+                # Log events for debugging
+                logger.debug(
+                    "ADK event received",
+                    event_type=type(adk_event).__name__,
+                    event_data=str(adk_event)[:200],
+                )
+
+                # Extract the final text response
+                if hasattr(adk_event, 'content') and adk_event.content:
+                    for part in adk_event.content.parts:
+                        if hasattr(part, 'text') and part.text:
+                            final_response = part.text
+
+                # Track tool calls
+                if hasattr(adk_event, 'tool_calls'):
+                    tool_calls.extend(adk_event.tool_calls)
 
         except Exception as e:
-            logger.warning("Failed to generate optimized query", error=str(e))
-            # Fall back to simple query
-            base_query.pubmed_query = question
+            logger.error("ADK runner error", error=str(e))
+            raise
 
-        return base_query
-
-    @trace_function(name="synthesize_evidence", run_type="llm")
-    async def _synthesize_evidence(
-        self,
-        question: str,
-        articles: list,
-    ) -> AgentResponse:
-        """Synthesize evidence from articles.
-
-        Args:
-            question: Original question
-            articles: List of Article objects
-
-        Returns:
-            AgentResponse with synthesized answer
-        """
-        from medlit.models import Citation, Evidence, EvidenceQuality
-        from medlit.prompts import get_template
-
-        # Format abstracts for LLM
-        abstracts_text = "\n\n---\n\n".join(
-            article.to_context_string() for article in articles
-        )
-
-        template = get_template("evidence_synthesis")
-        prompt = template.format(
-            question=question,
-            abstracts=abstracts_text,
-        )
-
-        try:
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt,
-            )
-
-            # Parse synthesis response
-            text = response.text
-            json_match = re.search(r"\{[\s\S]*\}", text)
-
-            synthesis = json.loads(json_match.group()) if json_match else {"summary": text}
-
-            # Build citations
-            citations = [
-                Citation(
-                    pmid=article.pmid,
-                    title=article.title,
-                    authors=article.first_author + (" et al." if len(article.authors) > 1 else ""),
-                    year=article.year,
-                    journal=article.journal_abbrev or article.journal,
-                )
-                for article in articles
-            ]
-
-            # Build evidence object
-            evidence = Evidence(
-                summary=synthesis.get("summary", ""),
-                quality=EvidenceQuality(synthesis.get("evidence_quality", "unknown")),
-                supporting_citations=citations,
-                limitations=synthesis.get("limitations", []),
-                consensus=synthesis.get("consensus"),
-            )
-
-            self.metrics.record_result(
-                citations_count=len(citations),
-                evidence_quality=evidence.quality.value,
-            )
-
+        # Build response
+        if not final_response:
             return AgentResponse(
                 question=question,
-                status=ResponseStatus.SUCCESS,
-                answer=synthesis.get("summary", ""),
-                evidence=evidence,
-                citations=citations,
-                pubmed_query="",  # Would be set from search
-                articles_found=len(articles),
-                articles_analyzed=len(articles),
+                status=ResponseStatus.NO_RESULTS,
                 disclaimer=MEDICAL_DISCLAIMER,
             )
 
-        except Exception as e:
-            logger.error("Synthesis failed", error=str(e))
-            raise
+        return AgentResponse(
+            question=question,
+            status=ResponseStatus.SUCCESS,
+            answer=final_response,
+            disclaimer=MEDICAL_DISCLAIMER,
+        )
 
     def ask_sync(self, question: str) -> AgentResponse:
         """Synchronous version of ask().

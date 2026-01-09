@@ -17,12 +17,12 @@ from medlit.agent import create_agent
 from medlit.utils.validators import validate_question, ValidationError
 
 
-async def ask_question(question: str) -> None:
+async def ask_question(question: str, enable_tracing: bool = True) -> None:
     """Ask a single question and print the response."""
     print(f"\n🔍 Question: {question}\n")
     print("Searching PubMed and synthesizing evidence...\n")
 
-    agent = create_agent(enable_tracing=False)
+    agent = create_agent(enable_tracing=enable_tracing)
     response = await agent.ask(question)
 
     print("=" * 60)
@@ -30,7 +30,7 @@ async def ask_question(question: str) -> None:
     print("=" * 60)
 
 
-async def interactive_mode() -> None:
+async def interactive_mode(enable_tracing: bool = True) -> None:
     """Run in interactive mode."""
     print("\n" + "=" * 60)
     print("MedLit Agent - Interactive Mode")
@@ -38,7 +38,7 @@ async def interactive_mode() -> None:
     print("Ask medical questions and get evidence-based answers.")
     print("Type 'quit' or 'exit' to stop.\n")
 
-    agent = create_agent(enable_tracing=False)
+    agent = create_agent(enable_tracing=enable_tracing)
 
     while True:
         try:
@@ -82,6 +82,7 @@ def main():
 Examples:
     python scripts/run_agent.py "Is aspirin good for heart health?"
     python scripts/run_agent.py --interactive
+    python scripts/run_agent.py --no-tracing "What are side effects of aspirin?"
         """,
     )
     parser.add_argument(
@@ -94,13 +95,19 @@ Examples:
         action="store_true",
         help="Run in interactive mode",
     )
+    parser.add_argument(
+        "--no-tracing",
+        action="store_true",
+        help="Disable LangSmith tracing",
+    )
 
     args = parser.parse_args()
+    enable_tracing = not args.no_tracing
 
     if args.interactive:
-        asyncio.run(interactive_mode())
+        asyncio.run(interactive_mode(enable_tracing=enable_tracing))
     elif args.question:
-        asyncio.run(ask_question(args.question))
+        asyncio.run(ask_question(args.question, enable_tracing=enable_tracing))
     else:
         parser.print_help()
         sys.exit(1)
