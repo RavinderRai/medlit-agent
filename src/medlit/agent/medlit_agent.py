@@ -1,22 +1,23 @@
 """MedLit Agent implementation using Google ADK."""
 
 import asyncio
+import json
+import re
 from datetime import date
-from typing import Optional
 
 import structlog
 from google import genai
 from google.adk import Agent
-from google.adk.tools import FunctionTool
 
-from config.settings import get_settings
-from config.constants import DEFAULT_DATE_RANGE_YEARS, MEDICAL_DISCLAIMER
-from medlit.agent.tools.pubmed_search import search_pubmed_tool
+from medlit.config.constants import DEFAULT_DATE_RANGE_YEARS, MEDICAL_DISCLAIMER
+from medlit.config.settings import get_settings
 from medlit.agent.tools.evidence_fetch import fetch_evidence_tool
+from medlit.agent.tools.pubmed_search import search_pubmed_tool
 from medlit.agent.tools.synthesize import synthesize_evidence_tool
-from medlit.models import AgentResponse, ResponseStatus, SearchQuery, SearchFilters
-from medlit.observability import init_langsmith, MetricsTracker
+from medlit.models import AgentResponse, ResponseStatus, SearchFilters, SearchQuery
+from medlit.observability import MetricsTracker, init_langsmith
 from medlit.observability.callbacks import MedLitCallbackHandler
+from medlit.observability.langsmith import trace_function
 from medlit.prompts import get_system_prompt
 from medlit.pubmed import PubMedClient
 
@@ -28,7 +29,7 @@ class MedLitAgent:
 
     def __init__(
         self,
-        model_name: Optional[str] = None,
+        model_name: str | None = None,
         enable_tracing: bool = True,
     ):
         """Initialize the MedLit agent.
@@ -80,6 +81,7 @@ class MedLitAgent:
 
         return agent
 
+    @trace_function(name="medlit_agent_ask", run_type="chain")
     async def ask(self, question: str) -> AgentResponse:
         """Process a medical question and return synthesized evidence.
 
@@ -114,6 +116,7 @@ class MedLitAgent:
                 disclaimer=MEDICAL_DISCLAIMER,
             )
 
+    @trace_function(name="medlit_agent_run", run_type="chain")
     async def _run_agent(self, question: str) -> AgentResponse:
         """Run the agent to process a question.
 
@@ -172,6 +175,7 @@ class MedLitAgent:
 
             return response
 
+    @trace_function(name="generate_search_query", run_type="llm")
     async def _generate_search_query(
         self,
         question: str,
@@ -186,7 +190,7 @@ class MedLitAgent:
         Returns:
             SearchQuery with optimized search terms
         """
-        from medlit.prompts import get_template, get_few_shot_examples
+        from medlit.prompts import get_few_shot_examples, get_template
 
         template = get_template("query_generation")
         examples = get_few_shot_examples("query_examples")
@@ -211,9 +215,6 @@ class MedLitAgent:
             )
 
             # Parse response - in production, use structured output
-            import json
-            import re
-
             text = response.text
             # Extract JSON from response
             json_match = re.search(r"\{[^{}]*\}", text, re.DOTALL)
@@ -230,6 +231,7 @@ class MedLitAgent:
 
         return base_query
 
+    @trace_function(name="synthesize_evidence", run_type="llm")
     async def _synthesize_evidence(
         self,
         question: str,
@@ -265,17 +267,10 @@ class MedLitAgent:
             )
 
             # Parse synthesis response
-            import json
-            import re
-
             text = response.text
             json_match = re.search(r"\{[\s\S]*\}", text)
 
-            if json_match:
-                synthesis = json.loads(json_match.group())
-            else:
-                # Fallback to using raw text as summary
-                synthesis = {"summary": text}
+            synthesis = json.loads(json_match.group()) if json_match else {"summary": text}
 
             # Build citations
             citations = [
@@ -332,7 +327,7 @@ class MedLitAgent:
 
 
 def create_agent(
-    model_name: Optional[str] = None,
+    model_name: str | None = None,
     enable_tracing: bool = True,
 ) -> MedLitAgent:
     """Factory function to create a MedLit agent.

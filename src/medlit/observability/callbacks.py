@@ -5,7 +5,7 @@ from typing import Any
 
 import structlog
 
-from config.settings import get_settings
+from medlit.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
 

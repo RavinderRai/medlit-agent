@@ -1,5 +1,5 @@
-from config.settings import Settings, get_settings
-from config.constants import (
+from medlit.config.settings import Settings, get_settings
+from medlit.config.constants import (
     DEFAULT_MAX_RESULTS,
     DEFAULT_DATE_RANGE_YEARS,
     PUBMED_BASE_URL,

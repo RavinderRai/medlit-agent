@@ -9,13 +9,17 @@ logger = structlog.get_logger(__name__)
 
 
 async def fetch_evidence(pmids: list[str]) -> dict:
-    """Fetch full article details from PubMed for given PMIDs.
+    """Fetch full article details from PubMed for a list of PMIDs.
+
+    Use this tool after searching PubMed to get the full abstracts and metadata
+    for articles you want to analyze.
 
     Args:
-        pmids: List of PubMed IDs to fetch (max 20)
+        pmids: List of PubMed IDs (PMIDs) as strings (max 20)
 
     Returns:
-        Dictionary with article details including titles, abstracts, and metadata
+        Dictionary with article details including title, abstract, authors, journal, year.
+        Maximum 20 articles per request.
     """
     if not pmids:
         return {
@@ -63,18 +67,5 @@ async def fetch_evidence(pmids: list[str]) -> dict:
 
 
 # Create the tool for Google ADK
-fetch_evidence_tool = FunctionTool(
-    func=fetch_evidence,
-    name="fetch_evidence",
-    description="""
-Fetch full article details from PubMed for a list of PMIDs.
-
-Use this tool after searching PubMed to get the full abstracts and metadata
-for articles you want to analyze.
-
-Input: List of PubMed IDs (PMIDs) as strings
-Output: Full article details including title, abstract, authors, journal, year
-
-Maximum 20 articles per request.
-""",
-)
+# Note: FunctionTool automatically extracts name from func.__name__ and description from func.__doc__
+fetch_evidence_tool = FunctionTool(func=fetch_evidence)

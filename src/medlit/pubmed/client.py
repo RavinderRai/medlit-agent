@@ -1,20 +1,18 @@
 """PubMed E-utilities API client."""
 
-from typing import Optional
-
 import httpx
 import structlog
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from config.settings import get_settings
-from config.constants import (
+from medlit.config.constants import (
     PUBMED_BASE_URL,
     PUBMED_RATE_LIMIT,
     PUBMED_RATE_LIMIT_WITH_KEY,
 )
+from medlit.config.settings import get_settings
 from medlit.models import Article, SearchQuery
-from medlit.pubmed.search import search_pubmed
 from medlit.pubmed.fetch import fetch_articles
+from medlit.pubmed.search import search_pubmed
 from medlit.utils.rate_limiter import RateLimiter
 
 logger = structlog.get_logger(__name__)
@@ -25,7 +23,7 @@ class PubMedClient:
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         timeout: float = 30.0,
     ):
         """Initialize PubMed client.
@@ -43,7 +41,7 @@ class PubMedClient:
         rate_limit = PUBMED_RATE_LIMIT_WITH_KEY if self.api_key else PUBMED_RATE_LIMIT
         self.rate_limiter = RateLimiter(rate_limit)
 
-        self._client: Optional[httpx.AsyncClient] = None
+        self._client: httpx.AsyncClient | None = None
 
         logger.info(
             "PubMed client initialized",

@@ -103,43 +103,6 @@ def sanitize_input(text: str, max_length: int | None = None) -> str:
 
     return text
 
-
-def is_medical_question(question: str) -> bool:
-    """Check if a question appears to be medical in nature.
-
-    This is a simple heuristic check, not a comprehensive classifier.
-
-    Args:
-        question: The question to check
-
-    Returns:
-        True if question appears medical
-    """
-    medical_keywords = {
-        # Conditions
-        "disease", "condition", "syndrome", "disorder", "infection",
-        "cancer", "diabetes", "hypertension", "heart", "lung",
-        "kidney", "liver", "brain", "blood", "bone",
-        # Treatments
-        "treatment", "therapy", "medication", "drug", "medicine",
-        "surgery", "procedure", "vaccine", "antibiotic",
-        # Actions
-        "prevent", "cure", "treat", "diagnose", "symptom",
-        "side effect", "risk", "benefit", "dose", "dosage",
-        # Body
-        "patient", "doctor", "hospital", "clinic", "health",
-        "body", "organ", "cell", "tissue", "immune",
-        # Research
-        "study", "trial", "research", "evidence", "effective",
-    }
-
-    question_lower = question.lower()
-    words = set(re.findall(r"\b\w+\b", question_lower))
-
-    matches = words & medical_keywords
-    return len(matches) >= 1
-
-
 def extract_entities(question: str) -> dict[str, list[str]]:
     """Extract potential medical entities from a question.
 

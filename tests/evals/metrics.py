@@ -1,7 +1,5 @@
 """Custom evaluation metrics for MedLit Agent."""
 
-from typing import Optional
-
 from medlit.models import AgentResponse, EvidenceQuality
 
 
@@ -40,11 +38,8 @@ def citation_quality_score(response: AgentResponse) -> float:
     scores.append(count_score)
 
     # Journal diversity
-    journals = set(c.journal for c in citations if c.journal)
-    if citations:
-        diversity_score = min(1.0, len(journals) / len(citations))
-    else:
-        diversity_score = 0.0
+    journals = {c.journal for c in citations if c.journal}
+    diversity_score = min(1.0, len(journals) / len(citations)) if citations else 0.0
     scores.append(diversity_score)
 
     # Recency (last 5 years gets full score)
@@ -52,10 +47,7 @@ def citation_quality_score(response: AgentResponse) -> float:
 
     current_year = date.today().year
     recent_count = sum(1 for c in citations if c.year and c.year >= current_year - 5)
-    if citations:
-        recency_score = recent_count / len(citations)
-    else:
-        recency_score = 0.0
+    recency_score = recent_count / len(citations) if citations else 0.0
     scores.append(recency_score)
 
     return sum(scores) / len(scores)
@@ -87,7 +79,7 @@ def evidence_quality_score(response: AgentResponse) -> float:
 
 def answer_completeness_score(
     response: AgentResponse,
-    expected_topics: Optional[list[str]] = None,
+    expected_topics: list[str] | None = None,
 ) -> float:
     """Calculate answer completeness score.
 
@@ -141,7 +133,7 @@ def answer_completeness_score(
 
 def overall_response_score(
     response: AgentResponse,
-    expected_topics: Optional[list[str]] = None,
+    expected_topics: list[str] | None = None,
 ) -> dict[str, float]:
     """Calculate overall response quality score.
 

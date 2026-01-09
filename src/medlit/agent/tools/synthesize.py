@@ -10,17 +10,22 @@ async def synthesize_evidence(
     question: str,
     articles: list[dict],
 ) -> dict:
-    """Synthesize evidence from multiple research articles.
+    """Synthesize evidence from multiple research articles into a coherent summary.
 
-    This tool takes a medical question and a list of article data,
-    then synthesizes the evidence into a coherent summary.
+    Use this tool after fetching article details to combine findings across
+    multiple studies and assess the overall quality of evidence.
 
     Args:
-        question: The original medical question being answered
-        articles: List of article dictionaries with title, abstract, etc.
+        question: The medical question being answered
+        articles: List of article dictionaries from fetch_evidence with title, abstract, etc.
 
     Returns:
-        Dictionary with synthesis results including summary, quality assessment, and limitations
+        Dictionary with synthesis results including:
+        - Summary of findings
+        - Evidence quality assessment
+        - Study type breakdown
+        - Key citations
+        - Limitations
     """
     if not articles:
         return {
@@ -90,24 +95,5 @@ async def synthesize_evidence(
 
 
 # Create the tool for Google ADK
-synthesize_evidence_tool = FunctionTool(
-    func=synthesize_evidence,
-    name="synthesize_evidence",
-    description="""
-Synthesize evidence from multiple research articles into a coherent summary.
-
-Use this tool after fetching article details to combine findings across
-multiple studies and assess the overall quality of evidence.
-
-Input:
-- question: The medical question being answered
-- articles: List of article dictionaries from fetch_evidence
-
-Output:
-- Summary of findings
-- Evidence quality assessment
-- Study type breakdown
-- Key citations
-- Limitations
-""",
-)
+# Note: FunctionTool automatically extracts name from func.__name__ and description from func.__doc__
+synthesize_evidence_tool = FunctionTool(func=synthesize_evidence)

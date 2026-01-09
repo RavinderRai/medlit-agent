@@ -15,7 +15,16 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from config.settings import get_settings
+from medlit.config.settings import get_settings
+from medlit.prompts import PromptRegistry
+
+# Optional LangSmith import
+try:
+    from langsmith import Client
+    LANGSMITH_AVAILABLE = True
+except ImportError:
+    Client = None
+    LANGSMITH_AVAILABLE = False
 
 
 def upload_prompt(name: str, content: str, description: str = "") -> None:
@@ -26,11 +35,13 @@ def upload_prompt(name: str, content: str, description: str = "") -> None:
         content: Prompt content
         description: Optional description
     """
-    try:
-        from langsmith import Client
+    if not LANGSMITH_AVAILABLE:
+        print("❌ LangSmith not installed")
+        return
 
+    try:
         settings = get_settings()
-        if not settings.langchain_api_key:
+        if not settings.langsmith_api_key:
             print("❌ LangSmith API key not configured")
             return
 
@@ -46,16 +57,12 @@ def upload_prompt(name: str, content: str, description: str = "") -> None:
 
         print(f"✅ Uploaded: {name}")
 
-    except ImportError:
-        print("❌ LangSmith not installed")
     except Exception as e:
         print(f"❌ Upload failed: {e}")
 
 
 def upload_all_prompts() -> None:
     """Upload all prompts from the prompts directory."""
-    from medlit.prompts import PromptRegistry
-
     registry = PromptRegistry()
     prompts_dir = Path(__file__).parent.parent / "src" / "medlit" / "prompts"
 
@@ -100,8 +107,6 @@ def main():
         print("🔍 Dry run mode - showing prompts that would be uploaded:\n")
 
     if args.prompt:
-        from medlit.prompts import PromptRegistry
-
         registry = PromptRegistry()
         # Try to find the prompt in different categories
         for category in ["system", "templates"]:

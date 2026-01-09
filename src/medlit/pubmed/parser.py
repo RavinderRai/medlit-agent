@@ -1,8 +1,6 @@
 """XML parsing utilities for PubMed responses."""
 
-import re
 from datetime import date
-from typing import Optional
 from xml.etree import ElementTree as ET
 
 import structlog
@@ -65,7 +63,7 @@ def parse_articles(xml_content: str) -> list[Article]:
     return articles
 
 
-def _parse_single_article(article_elem: ET.Element) -> Optional[Article]:
+def _parse_single_article(article_elem: ET.Element) -> Article | None:
     """Parse a single PubmedArticle element.
 
     Args:
@@ -194,7 +192,7 @@ def _parse_authors(article_info: ET.Element) -> list[Author]:
     return authors
 
 
-def _parse_publication_date(article_info: ET.Element) -> tuple[Optional[date], Optional[int]]:
+def _parse_publication_date(article_info: ET.Element) -> tuple[date | None, int | None]:
     """Parse publication date."""
     pub_date = None
     year = None
@@ -215,7 +213,7 @@ def _parse_publication_date(article_info: ET.Element) -> tuple[Optional[date], O
     return pub_date, year
 
 
-def _extract_date_from_element(date_elem: ET.Element) -> tuple[Optional[date], Optional[int]]:
+def _extract_date_from_element(date_elem: ET.Element) -> tuple[date | None, int | None]:
     """Extract date from a date element."""
     year_elem = date_elem.find("Year")
     month_elem = date_elem.find("Month")
@@ -260,7 +258,7 @@ def _parse_month(month_str: str) -> int:
         return month_map.get(month_str.lower()[:3], 1)
 
 
-def _parse_doi(article_elem: ET.Element) -> Optional[str]:
+def _parse_doi(article_elem: ET.Element) -> str | None:
     """Parse DOI from article data."""
     # Check ELocationID
     for eloc in article_elem.findall(".//ELocationID"):
@@ -275,7 +273,7 @@ def _parse_doi(article_elem: ET.Element) -> Optional[str]:
     return None
 
 
-def _parse_article_type(medline: ET.Element) -> Optional[str]:
+def _parse_article_type(medline: ET.Element) -> str | None:
     """Parse primary article type."""
     pub_type_list = medline.find(".//PublicationTypeList")
     if pub_type_list is None:

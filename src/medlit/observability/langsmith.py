@@ -1,5 +1,7 @@
 """LangSmith observability integration."""
 
+from __future__ import annotations
+
 import os
 from collections.abc import Callable
 from functools import wraps
@@ -7,7 +9,7 @@ from typing import Any, TypeVar
 
 import structlog
 
-from config.settings import get_settings
+from medlit.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
 
@@ -49,10 +51,11 @@ def init_langsmith() -> bool:
     os.environ["LANGCHAIN_PROJECT"] = settings.langsmith_project
 
     try:
-        _langsmith_client = LangSmithClient()
+        _langsmith_client = LangSmithClient(api_key=settings.langsmith_api_key)
         logger.info(
             "LangSmith initialized",
             project=settings.langsmith_project,
+            api_key_set=bool(settings.langsmith_api_key),
         )
         return True
     except Exception as e:
@@ -81,8 +84,10 @@ def trace_function(
         metadata: Additional metadata to attach to the trace
 
     Returns:
-        Decorated function
+        Decorated function (works with both sync and async)
     """
+    import asyncio
+
     def decorator(func: F) -> F:
         if not LANGSMITH_AVAILABLE or traceable is None:
             return func
@@ -94,14 +99,25 @@ def trace_function(
             metadata=metadata or {},
         )(func)
 
-        @wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            settings = get_settings()
-            if settings.langsmith_enabled:
-                return traced_func(*args, **kwargs)
-            return func(*args, **kwargs)
+        # Check if function is async
+        is_async = asyncio.iscoroutinefunction(func)
 
-        return wrapper  # type: ignore
+        if is_async:
+            @wraps(func)
+            async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+                settings = get_settings()
+                if settings.langsmith_enabled:
+                    return await traced_func(*args, **kwargs)
+                return await func(*args, **kwargs)
+            return async_wrapper  # type: ignore
+        else:
+            @wraps(func)
+            def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+                settings = get_settings()
+                if settings.langsmith_enabled:
+                    return traced_func(*args, **kwargs)
+                return func(*args, **kwargs)
+            return sync_wrapper  # type: ignore
 
     return decorator
 

@@ -7,7 +7,7 @@ from typing import Optional
 import click
 import structlog
 
-from config.settings import get_settings
+from medlit.config.settings import get_settings
 
 
 def setup_logging(log_level: str) -> None:
