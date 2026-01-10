@@ -31,6 +31,11 @@ def parse_answer_sections(answer: str) -> dict:
     # Clean up stray markdown markers and excessive whitespace
     # Remove standalone ** markers (often used as section separators by LLM)
     text = re.sub(r'^\*\*\s*$', '', text, flags=re.MULTILINE)
+    # Remove ** that appears right before section headers
+    text = re.sub(r'\*\*\s*\n\s*(?=##)', '', text)
+    text = re.sub(r'\*\*\s*(?=(?:Detailed )?Summary of Key Evidence)', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\*\*\s*(?=Important Limitations)', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\*\*\s*(?=Sources:)', '', text, flags=re.IGNORECASE)
     # Remove standalone ### or ## markers
     text = re.sub(r'^#{2,3}\s*$', '', text, flags=re.MULTILINE)
     # Collapse multiple consecutive blank lines into at most 2
@@ -38,7 +43,7 @@ def parse_answer_sections(answer: str) -> dict:
 
     # Common section headers to look for
     evidence_patterns = [
-        r"(?:##?\s*)?Summary of Key Evidence:?\s*",
+        r"(?:##?\s*)?Detailed Summary of Key Evidence:?\s*",
         r"(?:##?\s*)?Key Evidence:?\s*",
         r"(?:##?\s*)?Evidence Summary:?\s*",
     ]
@@ -108,6 +113,8 @@ def parse_answer_sections(answer: str) -> dict:
         content = text[end:section_end].strip()
 
         # Additional cleanup for each section
+        # Remove leading ** markers
+        content = re.sub(r'^\*\*\s*', '', content)
         # Remove stray markdown and excessive whitespace
         content = re.sub(r'^\*\*\s*$', '', content, flags=re.MULTILINE)
         content = re.sub(r'^#{2,3}\s*$', '', content, flags=re.MULTILINE)
@@ -194,7 +201,7 @@ async def on_message(message: cl.Message):
             # Add collapsible sections using HTML details/summary
             if sections['evidence_summary']:
                 formatted_response += f"""<details>
-<summary><strong>📊 Summary of Key Evidence</strong></summary>
+<summary><strong>📊 Detailed Summary of Key Evidence</strong></summary>
 <br>
 
 {sections['evidence_summary']}
