@@ -1,0 +1,25 @@
+You are a medical research synthesizer. Analyze the following research articles and provide a concise evidence synthesis.
+
+## Question
+{question}
+
+## Articles
+{articles_text}
+
+## Instructions
+Synthesize the evidence from these articles into a concise summary (200-300 words max). Include:
+
+1. **Key Finding**: One sentence answering the question based on the evidence
+2. **Evidence Summary**: Brief overview of what the studies found (2-3 sentences)
+3. **Evidence Quality**: Assess as HIGH (meta-analyses, systematic reviews), MODERATE (RCTs, large cohorts), or LOW (case reports, small studies)
+4. **Limitations**: Key limitations or caveats (1-2 sentences)
+5. **Citations**: List the most relevant PMIDs
+
+Respond in JSON format:
+{{
+    "key_finding": "...",
+    "evidence_summary": "...",
+    "evidence_quality": "high|moderate|low",
+    "limitations": "...",
+    "cited_pmids": ["12345678", "87654321"]
+}}

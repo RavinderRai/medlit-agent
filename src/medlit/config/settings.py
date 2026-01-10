@@ -63,8 +63,12 @@ class Settings(BaseSettings):
 
     # Model settings
     model_name: str = Field(
+        default="gemini-2.5-flash",
+        description="Main Gemini model for agent (higher capability)",
+    )
+    tool_model_name: str = Field(
         default="gemini-2.0-flash",
-        description="Default Gemini model to use",
+        description="Gemini model for tool calls (faster, cheaper)",
     )
     max_tokens: int = Field(
         default=4096,

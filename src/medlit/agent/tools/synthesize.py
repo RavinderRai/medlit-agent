@@ -1,10 +1,15 @@
 """Evidence synthesis tool for Google ADK agent."""
 
 import json
+import os
 
 import structlog
+from google import genai
 from google.adk.tools import FunctionTool
 from langsmith import traceable
+
+from medlit.config.settings import get_settings
+from medlit.prompts import get_template
 
 logger = structlog.get_logger(__name__)
 
@@ -14,21 +19,28 @@ async def synthesize_evidence(
     question: str,
     articles_json: str,
 ) -> dict:
-    """Synthesize evidence from multiple research articles into a coherent summary.
+    """Synthesize evidence from multiple research articles using LLM.
 
-    Use this tool after fetching article details to combine findings across
-    multiple studies and assess the overall quality of evidence.
+    This tool uses an LLM to analyze and summarize the research articles,
+    returning a concise synthesis instead of raw data.
 
     Args:
         question: The medical question being answered
         articles_json: JSON string containing list of article objects from fetch_evidence
 
     Returns:
-        Dictionary with synthesis results including summary, evidence quality, and citations.
+        Dictionary with concise synthesis including key findings, evidence quality, and citations.
     """
     # Parse the JSON string
     try:
-        articles = json.loads(articles_json) if isinstance(articles_json, str) else articles_json
+        parsed = json.loads(articles_json) if isinstance(articles_json, str) else articles_json
+        # Handle both {"articles": [...]} and direct list formats
+        if isinstance(parsed, dict):
+            articles = parsed.get("articles", [])
+        elif isinstance(parsed, list):
+            articles = parsed
+        else:
+            articles = []
     except json.JSONDecodeError:
         return {
             "success": False,
@@ -50,47 +62,87 @@ async def synthesize_evidence(
     )
 
     try:
-        # Analyze study types
-        study_types = {}
-        for article in articles:
-            article_type = article.get("article_type", "Unknown")
-            study_types[article_type] = study_types.get(article_type, 0) + 1
-
-        # Determine evidence quality based on study types
-        quality = "unknown"
-        if "Meta-Analysis" in study_types or "Systematic Review" in study_types:
-            quality = "high"
-        elif "Randomized Controlled Trial" in study_types or "Clinical Trial" in study_types:
-            quality = "moderate"
-        elif any(t in study_types for t in ["Cohort", "Case-Control", "Review", "Case Report"]):
-            quality = "low"
-
-        # Build synthesis summary (basic version - the main agent does detailed synthesis)
-        summary_parts = []
-        summary_parts.append(f"Based on {len(articles)} articles:")
-
-        for article in articles[:5]:  # Top 5 articles
-            title = article.get("title", "")[:100]
+        # Format articles for the prompt (concise format to save tokens)
+        articles_text = []
+        for i, article in enumerate(articles[:10], 1):  # Limit to 10 articles
+            pmid = article.get("pmid", "N/A")
+            title = article.get("title", "No title")
             year = article.get("year", "N/A")
-            pmid = article.get("pmid", "")
-            summary_parts.append(f"- {title} ({year}) [PMID: {pmid}]")
+            article_type = article.get("article_type", "Unknown")
+            abstract = article.get("abstract", "No abstract available")
+
+            # Truncate abstract to save context
+            if len(abstract) > 800:
+                abstract = abstract[:800] + "..."
+
+            articles_text.append(
+                f"### Article {i} [PMID: {pmid}]\n"
+                f"**Title**: {title}\n"
+                f"**Year**: {year} | **Type**: {article_type}\n"
+                f"**Abstract**: {abstract}\n"
+            )
+
+        formatted_articles = "\n---\n".join(articles_text)
+
+        # Build the prompt from template
+        template = get_template("evidence_synthesis_tool")
+        prompt = template.format(
+            question=question,
+            articles_text=formatted_articles,
+        )
+
+        # Call Gemini to synthesize (using faster model for tools)
+        settings = get_settings()
+        client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY"))
+        response = client.models.generate_content(
+            model=settings.tool_model_name,
+            contents=prompt,
+        )
+
+        # Parse the response
+        response_text = response.text
+
+        # Try to extract JSON from response
+        try:
+            # Find JSON in response
+            json_start = response_text.find("{")
+            json_end = response_text.rfind("}") + 1
+            if json_start >= 0 and json_end > json_start:
+                synthesis_data = json.loads(response_text[json_start:json_end])
+            else:
+                # Fallback if no JSON found
+                synthesis_data = {
+                    "key_finding": response_text[:500],
+                    "evidence_summary": "",
+                    "evidence_quality": "unknown",
+                    "limitations": "",
+                    "cited_pmids": [a.get("pmid") for a in articles[:5]],
+                }
+        except json.JSONDecodeError:
+            synthesis_data = {
+                "key_finding": response_text[:500],
+                "evidence_summary": "",
+                "evidence_quality": "unknown",
+                "limitations": "",
+                "cited_pmids": [a.get("pmid") for a in articles[:5]],
+            }
+
+        logger.info(
+            "Evidence synthesis completed",
+            evidence_quality=synthesis_data.get("evidence_quality"),
+            cited_count=len(synthesis_data.get("cited_pmids", [])),
+        )
 
         return {
             "success": True,
             "synthesis": {
                 "question": question,
-                "article_count": len(articles),
-                "study_types": study_types,
-                "evidence_quality": quality,
-                "summary": "\n".join(summary_parts),
-                "citations": [
-                    {"pmid": a.get("pmid"), "title": a.get("title"), "year": a.get("year")}
-                    for a in articles
-                ],
-                "limitations": [
-                    "This is an automated synthesis and should be reviewed",
-                    f"Based on {len(articles)} articles which may not be comprehensive",
-                ],
+                "key_finding": synthesis_data.get("key_finding", ""),
+                "evidence_summary": synthesis_data.get("evidence_summary", ""),
+                "evidence_quality": synthesis_data.get("evidence_quality", "unknown"),
+                "limitations": synthesis_data.get("limitations", ""),
+                "cited_pmids": synthesis_data.get("cited_pmids", []),
+                "articles_analyzed": len(articles),
             },
         }
 
@@ -104,5 +156,4 @@ async def synthesize_evidence(
 
 
 # Create the tool for Google ADK
-# Note: FunctionTool automatically extracts name from func.__name__ and description from func.__doc__
 synthesize_evidence_tool = FunctionTool(func=synthesize_evidence)
