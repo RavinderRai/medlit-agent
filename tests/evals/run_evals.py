@@ -1,150 +1,254 @@
-"""Evaluation runner for MedLit Agent.
+"""Evaluation runner for MedLit Agent using LangSmith.
 
-This script runs evaluations using the test dataset and optionally
-reports results to LangSmith.
+This script runs evaluations using LangSmith's evaluate() function
+and displays results in the LangSmith dashboard.
 
 Usage:
-    python -m tests.evals.run_evals [--langsmith] [--output results.json]
+    uv run python -m tests.evals.run_evals
+    uv run python -m tests.evals.run_evals --quick  # Only programmatic evals
 """
 
 import asyncio
 import json
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 import structlog
+from langsmith import Client, evaluate
+from langsmith.schemas import Example, Run
+
+# Add src to path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
+
+from medlit.agent import create_agent
+from medlit.observability import init_langsmith
+
+from tests.evals.evaluators import (
+    ALL_EVALUATORS,
+    LLM_JUDGE_EVALUATORS,
+    PROGRAMMATIC_EVALUATORS,
+    answer_quality,
+    citation_accuracy,
+    faithfulness,
+    has_citations,
+    relevance,
+    tool_trace_valid,
+    topic_coverage,
+)
 
 logger = structlog.get_logger(__name__)
 
 DATASET_PATH = Path(__file__).parent / "datasets" / "medical_qa.json"
+DATASET_NAME = "medlit-medical-qa"
 
 
-def load_dataset() -> list[dict]:
-    """Load the evaluation dataset."""
+def load_local_dataset() -> list[dict]:
+    """Load the evaluation dataset from local JSON file."""
     with open(DATASET_PATH) as f:
         return json.load(f)
 
 
-def evaluate_response(response, expected: dict) -> dict:
-    """Evaluate a single response against expected criteria.
-
-    Args:
-        response: AgentResponse object
-        expected: Expected criteria from dataset
+def create_or_update_langsmith_dataset(client: Client) -> str:
+    """Create or update the LangSmith dataset from local JSON.
 
     Returns:
-        Evaluation results
+        Dataset ID
     """
-    results = {
-        "question_id": expected["id"],
+    local_data = load_local_dataset()
+
+    # Check if dataset exists
+    try:
+        dataset = client.read_dataset(dataset_name=DATASET_NAME)
+        logger.info("Using existing dataset", dataset_id=dataset.id)
+    except Exception:
+        # Create new dataset
+        dataset = client.create_dataset(
+            dataset_name=DATASET_NAME,
+            description="Medical Q&A evaluation dataset for MedLit Agent",
+        )
+        logger.info("Created new dataset", dataset_id=dataset.id)
+
+        # Add examples
+        for item in local_data:
+            client.create_example(
+                inputs={"question": item["question"]},
+                outputs={
+                    "expected_topics": item.get("expected_topics", []),
+                    "expected_conclusion": item.get("expected_conclusion", ""),
+                    "difficulty": item.get("difficulty", "medium"),
+                },
+                dataset_id=dataset.id,
+                metadata={"id": item["id"]},
+            )
+        logger.info("Added examples to dataset", count=len(local_data))
+
+    return dataset.id
+
+
+# Global agent instance for reuse
+_agent = None
+
+
+def get_agent():
+    """Get or create the agent instance."""
+    global _agent
+    if _agent is None:
+        _agent = create_agent(enable_tracing=True)
+    return _agent
+
+
+def target_function(inputs: dict) -> dict:
+    """Target function that runs the agent on a question.
+
+    This is called by LangSmith's evaluate() for each example.
+    """
+    question = inputs["question"]
+    agent = get_agent()
+
+    # Run the agent
+    response = asyncio.run(agent.ask(question))
+
+    # Convert response to dict for evaluators
+    return {
+        "answer": response.answer or "",
         "status": response.status.value,
-        "has_answer": bool(response.answer),
-        "has_citations": len(response.citations) > 0,
-        "citation_count": len(response.citations),
-        "topics_covered": [],
-        "topics_missing": [],
-        "score": 0.0,
+        "citations": [
+            {
+                "pmid": c.pmid,
+                "title": c.title,
+                "authors": c.authors,
+                "year": c.year,
+            }
+            for c in (response.citations or [])
+        ],
+        "evidence_quality": (
+            response.evidence.quality.value if response.evidence else None
+        ),
+        "articles_found": response.articles_found or 0,
+        "error": response.error_message,
     }
 
-    if response.status.value != "success":
-        return results
 
-    # Check if expected topics are covered in the answer
-    answer_lower = response.answer.lower()
-    expected_topics = expected.get("expected_topics", [])
+def create_evaluator_wrapper(eval_func):
+    """Wrap our evaluator functions to work with LangSmith's expected signature."""
 
-    for topic in expected_topics:
-        # Simple keyword matching - could be improved with embeddings
-        topic_words = topic.lower().split()
-        if any(word in answer_lower for word in topic_words):
-            results["topics_covered"].append(topic)
-        else:
-            results["topics_missing"].append(topic)
+    def wrapper(run: Run, example: Example) -> dict:
+        outputs = run.outputs or {}
+        reference_outputs = example.outputs or {}
+        # Add question from inputs for context
+        reference_outputs["question"] = example.inputs.get("question", "")
 
-    # Calculate score
-    if expected_topics:
-        topic_coverage = len(results["topics_covered"]) / len(expected_topics)
+        result = eval_func(outputs, reference_outputs)
+        return {
+            "key": result["key"],
+            "score": result["score"],
+            "comment": result.get("reasoning", ""),
+        }
+
+    wrapper.__name__ = eval_func.__name__
+    return wrapper
+
+
+def run_evaluation(quick: bool = False, experiment_prefix: str = "medlit-eval"):
+    """Run the full evaluation suite.
+
+    Args:
+        quick: If True, only run programmatic evaluators (faster, no LLM calls)
+        experiment_prefix: Prefix for the experiment name in LangSmith
+    """
+    # Initialize LangSmith
+    init_langsmith()
+
+    client = Client()
+
+    # Create or update dataset
+    logger.info("Setting up dataset...")
+    dataset_id = create_or_update_langsmith_dataset(client)
+
+    # Select evaluators
+    if quick:
+        evaluators = PROGRAMMATIC_EVALUATORS
+        logger.info("Running quick evaluation (programmatic only)")
     else:
-        topic_coverage = 1.0
+        evaluators = ALL_EVALUATORS
+        logger.info("Running full evaluation (including LLM judges)")
 
-    citation_score = min(1.0, len(response.citations) / 3)  # Target 3+ citations
-    has_evidence = 1.0 if response.evidence else 0.0
+    # Wrap evaluators for LangSmith
+    wrapped_evaluators = [create_evaluator_wrapper(e) for e in evaluators]
 
-    results["score"] = (topic_coverage * 0.4 + citation_score * 0.3 + has_evidence * 0.3)
+    # Generate experiment name
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    experiment_name = f"{experiment_prefix}-{timestamp}"
+
+    logger.info(
+        "Starting evaluation",
+        experiment=experiment_name,
+        evaluators=[e.__name__ for e in evaluators],
+    )
+
+    # Run evaluation
+    results = evaluate(
+        target_function,
+        data=DATASET_NAME,
+        evaluators=wrapped_evaluators,
+        experiment_prefix=experiment_prefix,
+        metadata={
+            "quick": quick,
+            "timestamp": timestamp,
+        },
+    )
+
+    # Print summary
+    print_results_summary(results, evaluators)
 
     return results
 
 
-async def run_evaluation(
-    use_langsmith: bool = False,
-    output_file: Optional[str] = None,
-) -> dict:
-    """Run full evaluation suite.
+def print_results_summary(results, evaluators):
+    """Print a summary of evaluation results."""
+    print("\n" + "=" * 60)
+    print("EVALUATION RESULTS")
+    print("=" * 60)
 
-    Args:
-        use_langsmith: Whether to report to LangSmith
-        output_file: Optional file to write results
+    # Collect scores by evaluator
+    scores_by_eval = {e.__name__: [] for e in evaluators}
 
-    Returns:
-        Evaluation summary
-    """
-    from medlit.agent import create_agent
+    for result in results:
+        if hasattr(result, "evaluation_results") and result.evaluation_results:
+            for eval_result in result.evaluation_results:
+                key = eval_result.key
+                if key in scores_by_eval:
+                    scores_by_eval[key].append(eval_result.score or 0)
 
-    dataset = load_dataset()
-    logger.info("Loaded evaluation dataset", count=len(dataset))
+    # Print per-evaluator results
+    print("\nPer-Evaluator Results:")
+    print("-" * 60)
 
-    agent = create_agent(enable_tracing=use_langsmith)
+    all_pass_rates = []
+    for eval_name, scores in scores_by_eval.items():
+        if scores:
+            avg_score = sum(scores) / len(scores)
+            pass_rate = sum(1 for s in scores if s >= 0.5) / len(scores)
+            all_pass_rates.append(pass_rate)
 
-    results = []
-    for item in dataset:
-        logger.info("Evaluating", question_id=item["id"])
+            # Create visual bar
+            bar_len = 20
+            filled = int(pass_rate * bar_len)
+            bar = "█" * filled + "░" * (bar_len - filled)
 
-        try:
-            response = await agent.ask(item["question"])
-            eval_result = evaluate_response(response, item)
-            eval_result["error"] = None
-        except Exception as e:
-            logger.error("Evaluation failed", question_id=item["id"], error=str(e))
-            eval_result = {
-                "question_id": item["id"],
-                "status": "error",
-                "error": str(e),
-                "score": 0.0,
-            }
+            print(f"{eval_name:20} {bar} {pass_rate:6.1%} ({sum(scores):.1f}/{len(scores)})")
 
-        results.append(eval_result)
+    # Overall pass rate
+    if all_pass_rates:
+        overall = sum(all_pass_rates) / len(all_pass_rates)
+        print("-" * 60)
+        print(f"{'OVERALL':20} {'':20} {overall:6.1%}")
 
-    # Calculate summary statistics
-    successful = [r for r in results if r["status"] == "success"]
-    summary = {
-        "timestamp": datetime.utcnow().isoformat(),
-        "total_questions": len(dataset),
-        "successful": len(successful),
-        "failed": len(results) - len(successful),
-        "average_score": sum(r["score"] for r in results) / len(results) if results else 0,
-        "average_citations": (
-            sum(r.get("citation_count", 0) for r in successful) / len(successful)
-            if successful else 0
-        ),
-        "results": results,
-    }
-
-    logger.info(
-        "Evaluation complete",
-        total=summary["total_questions"],
-        successful=summary["successful"],
-        avg_score=f"{summary['average_score']:.2f}",
-    )
-
-    # Write results to file if specified
-    if output_file:
-        with open(output_file, "w") as f:
-            json.dump(summary, f, indent=2)
-        logger.info("Results written", file=output_file)
-
-    return summary
+    print("\n" + "=" * 60)
+    print("View detailed results at: https://smith.langchain.com")
+    print("=" * 60 + "\n")
 
 
 def main():
@@ -153,36 +257,37 @@ def main():
 
     parser = argparse.ArgumentParser(description="Run MedLit Agent evaluations")
     parser.add_argument(
-        "--langsmith",
+        "--quick",
         action="store_true",
-        help="Report results to LangSmith",
+        help="Only run programmatic evaluators (faster, no LLM judge calls)",
     )
     parser.add_argument(
-        "--output",
+        "--prefix",
         type=str,
-        help="Output file for results (JSON)",
+        default="medlit-eval",
+        help="Experiment name prefix",
     )
 
     args = parser.parse_args()
 
-    summary = asyncio.run(run_evaluation(
-        use_langsmith=args.langsmith,
-        output_file=args.output,
-    ))
-
-    # Print summary
-    print("\n" + "=" * 50)
-    print("EVALUATION SUMMARY")
-    print("=" * 50)
-    print(f"Total questions: {summary['total_questions']}")
-    print(f"Successful: {summary['successful']}")
-    print(f"Failed: {summary['failed']}")
-    print(f"Average score: {summary['average_score']:.2%}")
-    print(f"Average citations: {summary['average_citations']:.1f}")
-
-    # Exit with error if too many failures
-    if summary["failed"] > summary["total_questions"] / 2:
+    # Check for required env vars
+    if not os.environ.get("LANGSMITH_API_KEY"):
+        print("Error: LANGSMITH_API_KEY environment variable not set")
+        print("Set it in your .env file or export it")
         sys.exit(1)
+
+    if not os.environ.get("GOOGLE_API_KEY"):
+        print("Error: GOOGLE_API_KEY environment variable not set")
+        sys.exit(1)
+
+    try:
+        run_evaluation(quick=args.quick, experiment_prefix=args.prefix)
+    except KeyboardInterrupt:
+        print("\nEvaluation interrupted")
+        sys.exit(1)
+    except Exception as e:
+        logger.error("Evaluation failed", error=str(e))
+        raise
 
 
 if __name__ == "__main__":
