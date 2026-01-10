@@ -29,6 +29,8 @@ dependencies = [
     "opentelemetry-sdk>=1.37.0",
     "opentelemetry-exporter-otlp>=1.37.0",
     "openinference-instrumentation-google-adk>=0.1.8",
+    # UI
+    "chainlit>=1.0.0",
 ]
 
 [project.optional-dependencies]
